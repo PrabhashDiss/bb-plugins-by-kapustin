@@ -65,7 +65,9 @@ Synchronization with local Claude agent files and Tasks presets is **off by defa
 
 ```sh
 bb role list
+bb role create editor --name Editor --instructions "Review text for clarity"
 bb role show reviewer
+bb role delete editor
 bb role teams
 
 # File a job for later; this does not start a thread.

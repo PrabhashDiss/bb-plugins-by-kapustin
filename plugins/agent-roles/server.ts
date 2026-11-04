@@ -1165,7 +1165,9 @@ export default async function plugin(bb: BbPluginApi) {
   const usage = [
     "Usage:",
     "  bb role list [--json]                         roles",
+    "  bb role create <slug> --name <name> --instructions <text> [--description <text>] [--provider <id>] [--model <model>] [--reasoning <level>] [--permission <mode>] [--color <color>] [--json]",
     "  bb role show <role>                           full instructions",
+    "  bb role delete <role>                         delete a role",
     "  bb role spawn <role> --prompt <text> [--tasks-project <prefix>]   file a Tasks job for the role (no thread)",
     "  bb role spawn <role> --prompt <text> --thread [--parent-self | --parent <threadId>] [--project <id>] [--title <t>] [--hidden] [--wait]",
     "  bb role chat <TASK-KEY> [--parent-self] [--project <id>] [--wait]  open a thread for a role job",
@@ -1178,7 +1180,7 @@ export default async function plugin(bb: BbPluginApi) {
     "  bb role sync [--json]                         reconcile roles ↔ ~/.claude/agents ↔ Tasks presets now",
     "  bb role sync --status [--json]                last sync report",
     "",
-    "Create and edit roles/teams on the Agent roles page (sidebar).",
+    "Edit roles and create or edit teams on the Agent roles page (sidebar).",
   ].join("\n");
 
   function parseFlags(argv: string[]): { positional: string[]; flags: Map<string, string | true> } {
@@ -1202,7 +1204,9 @@ export default async function plugin(bb: BbPluginApi) {
     summary: "Specialist agent roles and multi-agent teams: spawn a role thread or run a team on a task",
     commands: [
       { name: "list", summary: "List roles", usage: "bb role list [--json]" },
+      { name: "create", summary: "Create a role", usage: "bb role create <slug> --name <name> --instructions <text> [--description <text>] [--provider <id>] [--model <model>] [--reasoning <level>] [--permission <mode>] [--color <color>] [--json]" },
       { name: "show", summary: "Show a role's instructions", usage: "bb role show <role>" },
+      { name: "delete", summary: "Delete a role", usage: "bb role delete <role>" },
       { name: "spawn", summary: "File a Tasks job for a role (or --thread to start a thread now)", usage: "bb role spawn <role> --prompt <text> [--thread] [--parent-self] [--project <id>] [--title <t>] [--hidden] [--wait]" },
       { name: "chat", summary: "Open a thread for a role job", usage: "bb role chat <TASK-KEY> [--parent-self] [--project <id>] [--wait]" },
       { name: "tasks", summary: "List open role jobs", usage: "bb role tasks [--json]" },
@@ -1238,10 +1242,32 @@ export default async function plugin(bb: BbPluginApi) {
             const roles = listRoles();
             return reply(roles, roles.map((r) => `${r.slug.padEnd(12)} ${r.name.padEnd(14)} ${r.providerId && r.model ? `${r.providerId}/${r.model}` : "(inherit model)"}  ${r.description}`).join("\n") || "No roles.");
           }
+          case "create": {
+            const allowed = new Set(["name", "instructions", "description", "provider", "model", "reasoning", "permission", "color", "json"]);
+            for (const [key, value] of flags) {
+              if (!allowed.has(key)) return fail(`Unknown option --${key}`);
+              if (key !== "json" && value === true) return fail(`--${key} requires a value`);
+            }
+            if (rest.length !== 1) return fail("Exactly one role slug is required");
+            const role = createRole(roleInputSchema.parse({
+              slug: rest[0], name: str(flags.get("name")), instructions: str(flags.get("instructions")),
+              description: str(flags.get("description")), providerId: str(flags.get("provider")),
+              model: str(flags.get("model")), reasoningLevel: str(flags.get("reasoning")),
+              permissionMode: str(flags.get("permission")), color: str(flags.get("color")),
+            }));
+            return reply(role, `Created role ${role.slug} (${role.id}).`);
+          }
           case "show": {
             const role = rest[0] ? findRole(rest[0]) : null;
             if (!role) return fail(`No role "${rest[0] ?? ""}".`);
             return reply(role, `${role.name} (${role.slug})\n${role.description}\nmodel: ${role.providerId ?? "inherit"}/${role.model ?? "inherit"} reasoning: ${role.reasoningLevel ?? "inherit"} permissions: ${role.permissionMode ?? "inherit"}\n\n${role.instructions}`);
+          }
+          case "delete": {
+            if (rest.length !== 1 || flags.size) return fail("Exactly one role is required");
+            const role = findRole(rest[0]!);
+            if (!role) return fail(`No role "${rest[0]}".`);
+            deleteRole(role.id);
+            return { exitCode: 0, stdout: `Deleted role ${role.slug} (${role.id}).` };
           }
           case "spawn": {
             const role = rest[0] ? findRole(rest[0]) : null;

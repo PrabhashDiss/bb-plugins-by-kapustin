@@ -17,13 +17,15 @@ role invocation with `inputs` (node ids whose outputs it receives); nodes
 whose inputs are done start immediately, so independent nodes run in
 parallel. Legacy team execution remains available through the CLI for existing data. The separate Visual Workflows plugin owns the visual constructor for new workflows.
 
-Roles are edited on the **Agent Roles** page (sidebar). Visual Workflows has its own step profiles, graphs and runs; it can import independent copies of legacy Agent Roles data. Neither plugin requires the other.
+Create and delete roles with `bb role create` and `bb role delete`, or on the **Agent Roles** page (sidebar). Edit roles on that page. Visual Workflows has its own step profiles, graphs and runs; it can import independent copies of legacy Agent Roles data. Neither plugin requires the other.
 
 ## Commands
 
 ```
 bb role list                                   roles and their default models
+bb role create <slug> --name <name> --instructions <text> [--description <text>] [--provider <id>] [--model <model>] [--reasoning <level>] [--permission <mode>] [--color <color>] [--json]
 bb role show <role>                            full instructions
+bb role delete <role>                          delete a role
 bb role spawn <role> --prompt "<task>"         file a job: a Tasks record for the role, no thread yet
 bb role spawn <role> --prompt "<task>" --thread [--parent-self] [--project <id>] [--title <t>] [--hidden] [--wait]
 bb role chat <TASK-KEY> [--parent-self] [--wait]  open the specialist thread for a filed job
