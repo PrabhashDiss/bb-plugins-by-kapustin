@@ -6,11 +6,11 @@ description: Spawn specialist agent threads by role (analyst, developer, reviewe
 # Agent roles and teams
 
 A **role** is a reusable specialist profile: standing instructions plus an
-optional default provider/model/reasoning/permission tuple. A role's
-instructions never appear in the chat: a role thread gets them as hidden
-system instructions, its first message is just the task, and the agent opens
-with a role card (`::agent-role{slug="…"}`), which BB also shows in the
-thread header. A **team** is an ordered list of stages; each stage
+optional default provider/model/reasoning/permission tuple. Use normal
+`bb thread spawn` for instructions only. This path keeps all core execution
+controls and does not add Tasks context. Both paths ask the agent to open its
+first reply with the role-card directive. Legacy `bb role` thread launches also
+apply role execution defaults. A **team** is an ordered list of stages; each stage
 runs one or more roles (in parallel or one by one) and passes their outputs
 to the next stage. Since the DAG update a team is a graph: every node is one
 role invocation with `inputs` (node ids whose outputs it receives); nodes
@@ -43,6 +43,22 @@ project and environment are taken from the current thread; the spawned
 threads share your workspace.
 
 ## How to delegate
+
+For instructions only, use the core launcher with an installed Agent Roles
+plugin that supports metadata seed validation:
+
+```sh
+bb thread spawn --project <id> --prompt "Review the diff" --parent-self \
+  --plugin-metadata-seed '{"pluginId":"agent-roles","metadata":{"instructionsOnly":true,"roleSlug":"reviewer"}}'
+```
+
+Use any normal spawn options for provider, model, reasoning, permissions,
+title, environment, attachments and notifications. The plugin validates the
+role slug before creation and snapshots its instructions. Unknown roles fail
+visibly. Later role edits or deletion do not change the snapshot. This path
+does not create or update Tasks records. Metadata is editable data, not trusted
+plugin-origin attribution. Oversized instructions fail instead of being cut.
+It needs the coupled core version with `experimental_thread.metadataSeed`.
 
 - File a job for a human to pick up later: `bb role spawn reviewer --prompt "…"`.
   This creates a Tasks record labelled `role:reviewer` (title `[Reviewer] …`)
@@ -98,7 +114,7 @@ prints what changed; `--status` shows the last report.
 
 ## Constraints
 
-- Worker threads run with the role's permission mode, capped by the parent's.
+- Legacy role and team threads use the role's permission mode, capped by the parent's. Instructions-only threads use core spawn permission selection.
 - A step fails if its thread errors or exceeds the plugin's step timeout
   (setting, default 45 min); the run then fails and pending steps are cancelled.
 - Roles referenced by a team must exist; deleting a role breaks those teams.

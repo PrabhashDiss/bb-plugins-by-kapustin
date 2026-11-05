@@ -35,7 +35,9 @@ export function validate() {
     for (const field of ['dependencies', 'devDependencies']) assert.deepEqual(lock.packages[''][field], pkg[field]);
     for (const [path, dependency] of Object.entries(lock.packages)) {
       assert.ok(!path.startsWith('../') && !dependency.link, `${name}: local dependency ${path}`);
-      if (dependency.resolved) assert.ok(dependency.resolved.startsWith('https://registry.npmjs.org/'), `${name}: dependency outside public npm: ${path}`);
+      // Temporary: agent-roles needs the unpublished metadata-seed hook, so it installs the SDK from a BB fork release asset. Remove once published.
+      const releaseSdk = name === 'agent-roles' && path === 'node_modules/@get-bb/plugin-sdk' && /^https:\/\/github\.com\/PrabhashDiss\/bb\/releases\/download\/[\w.-]+\/get-bb-plugin-sdk-[\d.]+\.tgz$/.test(dependency.resolved ?? '');
+      if (dependency.resolved && !releaseSdk) assert.ok(dependency.resolved.startsWith('https://registry.npmjs.org/'), `${name}: dependency outside public npm: ${path}`);
     }
     const entry = readJson(`marketplace/entries/${name}.json`);
     assert.equal(entry.id, name);

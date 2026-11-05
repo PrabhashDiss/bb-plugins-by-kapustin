@@ -15,7 +15,6 @@ import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import {
   PERMISSION_MODES,
-  REASONING_LEVELS,
   ROLE_COLORS,
   ROLES_CHANGED,
   RUNS_CHANGED,
@@ -51,7 +50,7 @@ const roleSchema = z.object({
   instructions: z.string(),
   providerId: z.string().nullable(),
   model: z.string().nullable(),
-  reasoningLevel: z.enum(REASONING_LEVELS).nullable(),
+  reasoningLevel: z.string().min(1).nullable(),
   permissionMode: z.enum(PERMISSION_MODES).nullable(),
   color: z.enum(ROLE_COLORS),
   sortOrder: z.number().int(),
@@ -68,7 +67,7 @@ const roleInputSchema = z
     instructions: z.string().trim().min(1).max(20_000),
     providerId: z.string().min(1).nullable().default(null),
     model: z.string().min(1).nullable().default(null),
-    reasoningLevel: z.enum(REASONING_LEVELS).nullable().default(null),
+    reasoningLevel: z.string().min(1).nullable().default(null),
     permissionMode: z.enum(PERMISSION_MODES).nullable().default(null),
     color: z.enum(ROLE_COLORS).default("gray"),
   })
@@ -767,22 +766,43 @@ export default async function plugin(bb: BbPluginApi) {
         : {};
     const args = {
       projectId: input.projectId,
-      environment: input.environmentId ? { type: "reuse", environmentId: input.environmentId } : { type: "project-default" },
+      environment: input.environmentId ? { type: "reuse" as const, environmentId: input.environmentId } : { type: "project-default" as const },
       prompt: input.prompt,
       title,
       ...tuple,
       ...(role.permissionMode ? { permissionMode: role.permissionMode } : {}),
       ...(input.parentThreadId ? { parentThreadId: input.parentThreadId } : {}),
-      ...(input.hidden ? { visibility: "hidden" } : {}),
+      ...(input.hidden ? { visibility: "hidden" as const } : {}),
       pluginMetadata: { roleId: role.id, roleSlug: role.slug, roleName: role.name, roleColor: role.color, taskKey: input.taskKey },
-    } as unknown as Parameters<typeof bb.sdk.threads.spawn>[0];
+    };
     const thread = await bb.sdk.threads.spawn(args);
     threadStmts.insert.run(thread.id, role.slug, input.taskKey, Date.now());
     return thread.id;
   }
 
   const INSTRUCTION_BUDGET = 3900; // bb truncates configure() instructions at 4096 chars
+  const instructionSeedSchema = z.object({ instructionsOnly: z.literal(true), roleSlug: z.string().min(1) });
+  const instructionSnapshotSchema = instructionSeedSchema.extend({
+    roleName: z.string().min(1), roleColor: z.enum(ROLE_COLORS), roleDescription: z.string(),
+    roleInstructions: z.string().min(1).max(INSTRUCTION_BUDGET),
+  });
+  bb.experimental_hooks.on("experimental_thread.metadataSeed", ({ metadata }) => {
+    const seed = instructionSeedSchema.safeParse(metadata);
+    if (!seed.success) return { action: "reject", message: "Expected instructionsOnly: true and a roleSlug" };
+    const role = roleBySlug(seed.data.roleSlug);
+    if (!role) return { action: "reject", message: `Unknown role "${seed.data.roleSlug}". Run bb role list.` };
+    const instructions = `# Your role: ${role.name}\n\nBegin your first reply with this exact line so BB renders your role card: ::agent-role{slug="${role.slug}"}\n\n${role.instructions}`;
+    if (instructions.length > INSTRUCTION_BUDGET) return { action: "reject", message: `Role instructions exceed the ${INSTRUCTION_BUDGET}-character budget` };
+    return { action: "accept", metadata: {
+      instructionsOnly: true, roleId: role.id, roleSlug: role.slug, roleName: role.name,
+      roleColor: role.color, roleDescription: role.description, roleInstructions: instructions,
+    } };
+  });
   bb.agents.configure((ctx) => {
+    if (ctx.pluginMetadata.instructionsOnly === true) {
+      const snapshot = instructionSnapshotSchema.parse(ctx.pluginMetadata);
+      return { tools: [], skills: ["agent-roles"], instructions: snapshot.roleInstructions };
+    }
     const slug = typeof ctx.pluginMetadata.roleSlug === "string" ? ctx.pluginMetadata.roleSlug : roleThread(ctx.thread.id)?.role_slug;
     const role = slug ? roleBySlug(slug) : null;
     if (!role) return { tools: [], skills: ["agent-roles"] };
@@ -1133,6 +1153,11 @@ export default async function plugin(bb: BbPluginApi) {
       if (!slug) {
         try {
           const meta = (await bb.sdk.threads.getPluginMetadata({ threadId })) as Record<string, unknown>;
+          if (meta.instructionsOnly === true) {
+            const snapshot = instructionSnapshotSchema.parse(meta);
+            return { roleSlug: snapshot.roleSlug, roleName: snapshot.roleName, description: snapshot.roleDescription,
+              color: snapshot.roleColor, instructions: snapshot.roleInstructions, taskKey: null };
+          }
           if (typeof meta.roleSlug === "string") slug = meta.roleSlug;
           if (typeof meta.taskKey === "string") taskKey = meta.taskKey;
         } catch { /* not a role thread */ }
@@ -1158,7 +1183,7 @@ export default async function plugin(bb: BbPluginApi) {
   bb.agents.contributeInstructions(() => {
     const roles = listRoles();
     if (roles.length === 0) return null;
-    return `Specialist agent roles (${roles.map((r) => r.slug).join(", ")}): \`bb role spawn <role> --prompt "..."\` files a Tasks job for that role (no thread yet; the user can open a chat from it), \`bb role spawn ... --thread --parent-self\` starts the specialist thread right away, \`bb role chat <TASK-KEY> --parent-self\` opens a thread for an existing job, and \`bb role run <team> --task "..."\` runs a multi-agent team. Role instructions are injected into the specialist thread automatically. See the agent-roles skill.`;
+    return `For role instructions with normal execution controls, use bb thread spawn with --plugin-metadata-seed '{"pluginId":"agent-roles","metadata":{"instructionsOnly":true,"roleSlug":"<slug>"}}'. This does not apply role execution defaults or Tasks context. See the agent-roles skill. Legacy specialist agent roles (${roles.map((r) => r.slug).join(", ")}): \`bb role spawn <role> --prompt "..."\` files a Tasks job for that role (no thread yet; the user can open a chat from it), \`bb role spawn ... --thread --parent-self\` starts the specialist thread right away, \`bb role chat <TASK-KEY> --parent-self\` opens a thread for an existing job, and \`bb role run <team> --task "..."\` runs a multi-agent team. Role instructions are injected into the specialist thread automatically. See the agent-roles skill.`;
   });
 
   // ------------------------------------------------------------------ CLI

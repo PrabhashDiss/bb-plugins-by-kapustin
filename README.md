@@ -77,7 +77,7 @@ See the [capture notes](marketplace/SCREENSHOTS.md).
 
 ## Develop
 
-Node 22.19+ and the BB CLI are required. Packages have independent public npm lockfiles and no sibling workspace dependencies.
+Node 22.19+ and the BB CLI are required. Packages have independent public npm lockfiles and no sibling workspace dependencies. Agent Roles temporarily installs its Plugin SDK from a BB fork release asset URL until the metadata-seed hook is published to npm.
 
     npm run deps
     npm run verify

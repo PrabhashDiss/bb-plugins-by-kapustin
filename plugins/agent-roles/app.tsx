@@ -12,6 +12,7 @@ import type { ComponentProps, ReactNode } from "react";
 import {
   ThreadChat,
   definePluginApp,
+  experimental_useThreadContextKind as useThreadContextKind,
   experimental_PermissionModePicker as PermissionModePicker,
   experimental_ProviderModelPicker as ProviderModelPicker,
   useBbContext,
@@ -345,14 +346,24 @@ function RoleDirective({ attributes }: { attributes: Readonly<Record<string, str
   return <RoleCard role={role} taskKey={attributes.task ?? null} />;
 }
 
-function ThreadRoleBadge({ threadId, isCompactViewport }: { threadId: string; projectId: string; isCompactViewport: boolean }) {
+function ThreadRoleBadge({ threadId }: { threadId: string; projectId: string }) {
   const rpc = useRpc<typeof rpcContract>();
   const [info, setInfo] = useState<Awaited<ReturnType<typeof rpc.call<"thread_role">>> | undefined>(undefined);
   useEffect(() => {
     rpc.call("thread_role", { threadId }).then(setInfo).catch(() => setInfo(null));
   }, [rpc, threadId]);
   if (!info) return null;
-  return <RoleCard role={{ name: info.roleName, slug: info.roleSlug, description: info.description, color: info.color, instructions: info.instructions }} taskKey={info.taskKey} compact={isCompactViewport} />;
+  return <RoleCard role={{ name: info.roleName, slug: info.roleSlug, description: info.description, color: info.color, instructions: info.instructions }} taskKey={info.taskKey} />;
+}
+
+function useRoleSegmentVisible({ threadId }: { threadId: string }) {
+  const rpc = useRpc<typeof rpcContract>();
+  const banner = useThreadContextKind() === "banner";
+  const [hasRole, setHasRole] = useState(false);
+  useEffect(() => {
+    rpc.call("thread_role", { threadId }).then((r) => setHasRole(r !== null)).catch(() => setHasRole(false));
+  }, [rpc, threadId]);
+  return banner && hasRole;
 }
 
 function RoleJobs({ roles, refreshKey }: { roles: Role[]; refreshKey: number }) {
@@ -1006,7 +1017,9 @@ function RootPage() {
 
 export default definePluginApp((app) => {
   app.slots.messageDirective({ id: "agent-role", component: RoleDirective });
-  app.slots.experimental_threadHeaderAction({ id: "role-badge", title: "Agent role", component: ThreadRoleBadge });
+  app.slots.experimental_threadContextCardSection({ id: "role-badge", title: "Agent role", group: "agent-roles", component: ThreadRoleBadge });
+  // The card section draws only while the pane shows the thread context card, so the banner needs its own copy.
+  app.slots.experimental_threadContextSegment({ id: "role-badge", title: "Agent role", group: "agent-roles", summary: ThreadRoleBadge, useVisible: useRoleSegmentVisible });
   app.slots.navPanel({
     id: "roles",
     title: "Agent roles",

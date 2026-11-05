@@ -77,6 +77,15 @@ bb role spawn reviewer --prompt "Review the release checklist"
 <details>
 <summary>Behavior, data and limits</summary>
 
+For role instructions with all normal execution controls, use `bb thread spawn`
+with `--plugin-metadata-seed '{"pluginId":"agent-roles","metadata":{"instructionsOnly":true,"roleSlug":"reviewer"}}'`.
+This requires the coupled core metadata seed hook. It validates and snapshots
+the role before creation, without role execution defaults or automatic Tasks
+context. The snapshot asks the agent to open its first reply with the role card
+directive. Unknown roles fail before a thread is created.
+Legacy `bb role` job and team behavior is unchanged. See the skill below for
+the full command.
+
 The visual editor now lives in the independent [Visual Workflows](../visual-workflows/README.md) plugin. Existing team templates and run history remain in Agent Roles and are accessible through the legacy CLI. Importing copies does not delete that data.
 
 Independent steps begin when their inputs are available. Worker permissions are capped by the parent’s permissions. A failed or timed-out step fails the run and cancels pending steps. Deleting a role that a team uses breaks that team’s reference.
