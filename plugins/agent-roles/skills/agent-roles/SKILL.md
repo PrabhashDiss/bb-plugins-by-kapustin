@@ -39,8 +39,9 @@ bb role sync [--status] [--json]               reconcile roles â†” agent files â
 ```
 
 `<role>` / `<team>` accept slug, id, or exact name. Inside a thread the
-project and environment are taken from the current thread; the spawned
-threads share your workspace.
+project is taken from the current thread unless `--project` is given.
+Legacy role launches reuse the current environment only for the same project.
+Cross-project launches use the target project's default environment.
 
 ## How to delegate
 

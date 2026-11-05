@@ -1110,7 +1110,7 @@ export default async function plugin(bb: BbPluginApi) {
       try {
         const t = await bb.sdk.threads.get({ threadId: ctx.threadId });
         projectId ??= t.projectId;
-        environmentId = t.environmentId ?? null;
+        environmentId = t.projectId === projectId ? t.environmentId ?? null : null;
       } catch { /* thread gone — fall through */ }
     }
     if (!projectId) throw new Error("No project: pass --project <id> or run inside a thread.");
